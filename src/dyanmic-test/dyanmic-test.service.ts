@@ -3,7 +3,6 @@ import { ConfigService } from '../config/config.service';
 
 @Injectable()
 export class DyanmicTestService {
-
   constructor(private readonly config: ConfigService) {}
 
   getConfigString(): string {
