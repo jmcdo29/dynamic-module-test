@@ -4,7 +4,7 @@ import { DyanmicTestService } from './dyanmic-test.service';
 import { DyanmicTestController } from './dyanmic-test.controller';
 
 @Module({
-  imports: [ConfigModule],
+  imports: [ConfigModule.Deferred],
   providers: [DyanmicTestService],
   controllers: [DyanmicTestController],
 })

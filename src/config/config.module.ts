@@ -7,25 +7,50 @@ import {
   ConfigModuleOptions,
   ConfigOptionsFactory,
 } from './interfaces/config-options.interface';
+import { Subject, interval, race } from 'rxjs';
+import { take, first, map } from 'rxjs/operators';
 
 @Module({
   providers: [ConfigService],
   exports: [ConfigService],
 })
 export class ConfigModule {
+  private static moduleSubject = new Subject<DynamicModule>();
+
+  private static timeout$ = interval(2500).pipe(
+    first(),
+    map(x => {
+      throw new Error(
+        `Expected Config Service to be configured by at last one Module but it was not configured within 2500ms`,
+      );
+    }),
+  );
+
+  public static Deferred: Promise<DynamicModule> = race(
+    ConfigModule.timeout$,
+    ConfigModule.moduleSubject.pipe(take(1)),
+  ).toPromise();
+
   static forRoot(options: ConfigModuleOptions): DynamicModule {
-    return {
+    const dynamicConfigModule = {
       module: ConfigModule,
       providers: createConfigProvider(options),
     };
+
+    this.moduleSubject.next(dynamicConfigModule);
+
+    return dynamicConfigModule;
   }
 
   static forRootAsync(options: ConfigModuleAsyncOptions): DynamicModule {
-    return {
+    const dynamicConfigModule = {
       module: ConfigModule,
       imports: options.imports || [],
       providers: this.createAsyncProviders(options),
     };
+
+    this.moduleSubject.next(dynamicConfigModule);
+    return dynamicConfigModule;
   }
 
   private static createAsyncProviders(
