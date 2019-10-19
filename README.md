@@ -1,75 +1,159 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo_text.svg" width="320" alt="Nest Logo" /></a>
-</p>
+# Dynamic Module Configuration
 
-[travis-image]: https://api.travis-ci.org/nestjs/nest.svg?branch=master
-[travis-url]: https://travis-ci.org/nestjs/nest
-[linux-image]: https://img.shields.io/travis/nestjs/nest/master.svg?label=linux
-[linux-url]: https://travis-ci.org/nestjs/nest
-  
-  <p align="center">A progressive <a href="http://nodejs.org" target="blank">Node.js</a> framework for building efficient and scalable server-side applications, heavily inspired by <a href="https://angular.io" target="blank">Angular</a>.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore"><img src="https://img.shields.io/npm/dm/@nestjs/core.svg" alt="NPM Downloads" /></a>
-<a href="https://travis-ci.org/nestjs/nest"><img src="https://api.travis-ci.org/nestjs/nest.svg?branch=master" alt="Travis" /></a>
-<a href="https://travis-ci.org/nestjs/nest"><img src="https://img.shields.io/travis/nestjs/nest/master.svg?label=linux" alt="Linux" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#5" alt="Coverage" /></a>
-<a href="https://gitter.im/nestjs/nestjs?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=body_badge"><img src="https://badges.gitter.im/nestjs/nestjs.svg" alt="Gitter" /></a>
-<a href="https://opencollective.com/nest#backer"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec"><img src="https://img.shields.io/badge/Donate-PayPal-dc3d53.svg"/></a>
-  <a href="https://twitter.com/nestframework"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Why
 
-## Description
+Occasionally you'll come across a use case in NestJS where you want to use a DynamicModule, but you'll only want to worry about the main configuration of that module once (like a `ConfigModule`). One option, of course, is to use the `@Global()` decorator, but if you want to make yourself more conscious about what you import and where, you could use something similar to this repository.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## How
 
-## Installation
+Just like any Dynamic Module in NestJS, we need a static configuration method (and possibly an async one too), whether it is `register` or `forRoot` or whatever else you want to call it. The difference here is that we also need an RxJS `Subject` to be able to keep track of the module configuration without polluting the global scope. After setting up the ability to work with a Dynamic Module you can follow the rest of these steps:
 
-```bash
-$ npm install
+1. Create a private static variable for your RxJS Subject with type of `Subject<DynamicModule>`.
+2. Create a private static variable that has a `timeout` function from RxJS and throws an error if the timeout is reached (2.5 seconds is pretty good, but also probably a bit long)
+3. Create a public static variable that returns the `race` of the `timeout` and the Subject's next value (hint: there should only be one value in the subject anyways) and returns it as a `Promise<DynamicModule>`
+4. In your static configuration methods (`forRoot`, `forRootAsync`, etc.), add the dynamicModuleConfiguration to the class's static RxJS Subject.
+5. In your `AppModule` add your configuration for the DynamicModule and in any other module that needs this DynamicModule without re-configuring add the import `DynamicModule.Deferred` or whatever you called the variable that returns the `race` condition.
+6. Use the module as normal.
+
+## Example
+
+### Config Module
+
+```ts
+import { DynamicModule, Module, Provider } from '@nestjs/common';
+import { interval, race, Subject } from 'rxjs';
+import { first, map, take } from 'rxjs/operators';
+import { CONFIG_MODULE_OPTIONS } from './config.constants';
+import { createConfigProvider } from './config.provider';
+import { ConfigService } from './config.service';
+import {
+  ConfigModuleAsyncOptions,
+  ConfigModuleOptions,
+  ConfigOptionsFactory,
+} from './interfaces/config-options.interface';
+
+@Module({
+  providers: [ConfigService],
+  exports: [ConfigService],
+})
+export class ConfigModule {
+  private static moduleSubject = new Subject<DynamicModule>();
+
+  private static timeout$ = interval(2500).pipe(
+    first(),
+    map(() => {
+      throw new Error(
+        `Expected Config Service to be configured by at last one Module but it was not configured within 2500ms`,
+      );
+    }),
+  );
+
+  public static Deferred: Promise<DynamicModule> = race(
+    ConfigModule.timeout$,
+    ConfigModule.moduleSubject.pipe(take(1)),
+  ).toPromise();
+
+  static forRoot(options: ConfigModuleOptions): DynamicModule {
+    const dynamicConfigModule = {
+      module: ConfigModule,
+      providers: createConfigProvider(options),
+    };
+
+    this.moduleSubject.next(dynamicConfigModule);
+
+    return dynamicConfigModule;
+  }
+
+  static forRootAsync(options: ConfigModuleAsyncOptions): DynamicModule {
+    const dynamicConfigModule = {
+      module: ConfigModule,
+      imports: options.imports || [],
+      providers: this.createAsyncProviders(options),
+    };
+
+    this.moduleSubject.next(dynamicConfigModule);
+    return dynamicConfigModule;
+  }
+
+  private static createAsyncProviders(
+    options: ConfigModuleAsyncOptions,
+  ): Provider[] {
+    if (options.useExisting || options.useFactory) {
+      return [this.createAsyncOptionsProviders(options)];
+    }
+    if (options.useClass) {
+      return [
+        this.createAsyncOptionsProviders(options),
+        {
+          provide: options.useClass,
+          useClass: options.useClass,
+        },
+      ];
+    }
+    throw new Error('Invalid ConfigModule configuration.');
+  }
+
+  private static createAsyncOptionsProviders(
+    options: ConfigModuleAsyncOptions,
+  ): Provider {
+    if (options.useFactory) {
+      return {
+        provide: CONFIG_MODULE_OPTIONS,
+        useFactory: options.useFactory,
+        inject: options.inject || [],
+      };
+    }
+    return {
+      provide: CONFIG_MODULE_OPTIONS,
+      useFactory: async (optionsFactory: ConfigOptionsFactory) =>
+        await optionsFactory.createConfigOptions(),
+      inject: [options.useExisting || options.useClass || ''],
+    };
+  }
+}
 ```
 
-## Running the app
+### App Module
 
-```bash
-# development
-$ npm run start
+```ts
+import { Module } from '@nestjs/common';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { DyanmicTestModule } from './dyanmic-test/dyanmic-test.module';
+import { ConfigModule } from './config/config.module';
 
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+@Module({
+  imports: [
+    ConfigModule.forRootAsync({
+      useFactory: () => ({
+        fileName: '.env',
+        useProcess: false,
+      }),
+    }),
+    DyanmicTestModule,
+  ],
+  controllers: [AppController],
+  providers: [AppService],
+})
+export class AppModule {}
 ```
 
-## Test
+### Dynamic Test Module
 
-```bash
-# unit tests
-$ npm run test
+```ts
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '../config/config.module';
+import { DyanmicTestService } from './dyanmic-test.service';
+import { DyanmicTestController } from './dyanmic-test.controller';
 
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+@Module({
+  imports: [ConfigModule.Deferred],
+  providers: [DyanmicTestService],
+  controllers: [DyanmicTestController],
+})
+export class DyanmicTestModule {}
 ```
 
-## Support
+## Shout-outs
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://kamilmysliwiec.com)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-  Nest is [MIT licensed](LICENSE).
+A big thanks to [John Biundo](https://github.com/johnbiundo) and [Jesse Carter](https://github.com/WonderPanda) for working through this issue with me and eventually finding a solution!
