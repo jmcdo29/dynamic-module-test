@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { DyanmicTestModule } from './dyanmic-test/dyanmic-test.module';
 import { ConfigModule } from './config/config.module';
+import { DyanmicTestModule } from './dyanmic-test/dyanmic-test.module';
 
 @Module({
   imports: [
-    ConfigModule.forRootAsync({
+    ConfigModule.forRootAsync(ConfigModule, {
       useFactory: () => ({
         fileName: '.env',
         useProcess: false,
