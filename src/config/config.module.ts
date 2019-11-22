@@ -1,4 +1,4 @@
-import { DynamicModule, Module, Provider } from '@nestjs/common';
+import { DynamicModule, Module, Provider, Global } from '@nestjs/common';
 import { CONFIG_MODULE_OPTIONS } from './config.constants';
 import { createConfigProvider } from './config.provider';
 import { ConfigService } from './config.service';
@@ -8,15 +8,14 @@ import {
   ConfigOptionsFactory,
 } from './interfaces/config-options.interface';
 
-@Module({
-  providers: [ConfigService],
-  exports: [ConfigService],
-})
+@Global()
+@Module({})
 export class ConfigModule {
   static forRoot(options: ConfigModuleOptions): DynamicModule {
     return {
       module: ConfigModule,
-      providers: createConfigProvider(options),
+      providers: [ConfigService, ...createConfigProvider(options)],
+      exports: [ConfigService],
     };
   }
 
@@ -24,7 +23,8 @@ export class ConfigModule {
     return {
       module: ConfigModule,
       imports: options.imports || [],
-      providers: this.createAsyncProviders(options),
+      providers: [ConfigService, ...this.createAsyncProviders(options)],
+      exports: [ConfigService],
     };
   }
 
