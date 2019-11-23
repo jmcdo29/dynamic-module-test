@@ -11,4 +11,6 @@ import { ConfigModuleOptions } from './interfaces/config-options.interface';
 export class ConfigModule extends createConfigurableDynamicRootModule<
   ConfigModule,
   ConfigModuleOptions
->(CONFIG_MODULE_OPTIONS) {}
+>(CONFIG_MODULE_OPTIONS) {
+  static Deferred = ConfigModule.externallyConfigured(ConfigModule, 1000);
+}

@@ -1,12 +1,13 @@
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '../config/config.service';
+import { Injectable, Inject } from '@nestjs/common';
 
 @Injectable()
 export class DyanmicTestService {
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    @Inject('DYNAMIC_CONFIG_TOKEN')
+    private readonly config: { configString: string },
+  ) {}
 
   getConfigString(): string {
-    return this.config.getTestString();
-    // return 'test string';
+    return this.config.configString;
   }
 }
