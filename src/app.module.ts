@@ -18,6 +18,7 @@ import { ConfigService } from './config/config.service';
         configString: config.getTestString(),
       }),
       imports: [ConfigModule.Deferred],
+      inject: [ConfigService],
     }),
   ],
   controllers: [AppController],

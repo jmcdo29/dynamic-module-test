@@ -46,10 +46,6 @@ export class ConfigService {
     return validatedEnvConfig as EnvConfig;
   }
 
-  /* get(key: string): string {
-    return this.envConfig[key] || '';
-  } */
-
   getTestString(): string {
     return this.envConfig.TEST_STRING;
   }
