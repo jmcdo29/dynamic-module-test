@@ -1,5 +1,5 @@
 import { createConfigurableDynamicRootModule } from '@golevelup/nestjs-modules';
-import { Global, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { CONFIG_MODULE_OPTIONS } from './config.constants';
 import { ConfigService } from './config.service';
 import { ConfigModuleOptions } from './interfaces/config-options.interface';
